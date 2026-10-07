@@ -12,11 +12,14 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Segoe UI",Rob
 main,header{max-width:760px;margin:0 auto;padding:0 16px}
 header{padding-top:24px}
 .goal{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px}
-.goal .n{font-size:2.4rem;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.goal .n{font-size:2.2rem;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
 .goal .n small{font-size:1rem;font-weight:400;color:var(--mute)}
 .bar{height:10px;background:var(--ac2);border-radius:6px;overflow:hidden;margin-top:12px}
 .bar i{display:block;height:100%;background:var(--ac);transition:width .4s}
 .goal p{margin:8px 0 0;color:var(--mute);font-size:.9rem}
+.curr-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.curr-tabs button{font:inherit;font-size:.85rem;padding:4px 10px;border-radius:20px;border:1px solid var(--line);background:var(--bg);color:var(--mute);cursor:pointer}
+.curr-tabs button[aria-selected=true]{background:var(--ac);color:#fff;border-color:var(--ac)}
 nav{display:flex;gap:4px;margin:20px 0 12px;border-bottom:1px solid var(--line)}
 nav button{background:none;border:0;border-bottom:3px solid transparent;padding:10px 14px;font:inherit;color:var(--mute);cursor:pointer}
 nav button[aria-selected=true]{color:var(--ink);border-color:var(--ac);font-weight:600}
@@ -36,7 +39,7 @@ table{width:100%;border-collapse:collapse;background:var(--panel);border:1px sol
 th,td{padding:10px;text-align:left;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
 th{font-size:.85rem;color:var(--mute);font-weight:600}
 .scroll{overflow-x:auto}
-.day{display:grid;grid-template-columns:90px 1fr 80px;gap:10px;align-items:center;margin:6px 0;font-variant-numeric:tabular-nums}
+.day{display:grid;grid-template-columns:90px 1fr 90px;gap:10px;align-items:center;margin:6px 0;font-variant-numeric:tabular-nums}
 .day .bar{margin:0}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px}
 .panel h3{margin-bottom:8px}
@@ -44,15 +47,17 @@ th{font-size:.85rem;color:var(--mute);font-weight:600}
 textarea{width:100%;min-height:90px}
 .note{color:var(--mute);font-size:.88rem}
 footer{max-width:760px;margin:24px auto;padding:0 16px;color:var(--mute);font-size:.85rem}
+.badge{display:inline-block;font-size:.75rem;padding:1px 7px;border-radius:10px;background:var(--ac2);color:var(--ac);font-weight:600;margin-left:4px}
 @media(prefers-reduced-motion:reduce){.bar i{transition:none}}
 </style>
 </head>
 <body>
 <header>
   <div class="goal">
-    <div class="n"><span id="today">0.0000</span> <small>/ <span id="goalv">1</span> USDT oggi</small></div>
+    <div class="n"><span id="today">0</span> <small id="goal-label">/ <span id="goalv">0</span> <span id="goal-cur">USDT</span> oggi</small></div>
     <div class="bar"><i id="pbar" style="width:0"></i></div>
     <p id="gtext"></p>
+    <div class="curr-tabs" id="curr-tabs" role="tablist" aria-label="Valuta obiettivo"></div>
   </div>
   <nav role="tablist">
     <button role="tab" data-tab="sites">Siti</button>
@@ -63,26 +68,49 @@ footer{max-width:760px;margin:24px auto;padding:0 16px;color:var(--mute);font-si
 </header>
 <main id="view"></main>
 <footer>
-  Dati salvati in questo browser e, se attivi la sincronizzazione, anche nel cloud. Gli importi sono in equivalente USDT: converti tu quello che ricevi in altre monete.
+  Dati salvati in questo browser e, se attivi la sincronizzazione, anche nel cloud.
+  Ogni sito ha la sua crypto: registra l’importo reale del premio.
   <a href="https://faucetpay.io" target="_blank" rel="noopener">Apri FaucetPay</a>
 </footer>
 <script>
-const K='faucetdesk.v1';
-let S=null,tab='sites';
+const K='faucetdesk.v2';
+let S=null,tab='sites',activeCur='USDT';
 try{S=JSON.parse(localStorage.getItem(K))}catch(e){}
+
+/* Catalogo con valuta tipica del premio */
 const CAT=[
-{name:'FireFaucet',url:'https://firefaucet.win',cd:30,type:'faucet'},
-{name:'FaucetCrypto',url:'https://faucetcrypto.com',cd:30,type:'faucet'},
-{name:'FreeBitcoin',url:'https://freebitco.in',cd:60,type:'faucet'},
-{name:'Bitcoinker',url:'https://bitcoinker.com',cd:5,type:'faucet'},
-{name:'BonusBitcoin',url:'https://bonusbitcoin.co',cd:15,type:'faucet'},
-{name:'Satoshihero',url:'https://satoshihero.com',cd:8,type:'faucet'},
-{name:'Cointiply',url:'https://cointiply.com',cd:60,type:'offerwall'},
-{name:'CoinPayU',url:'https://www.coinpayu.com',cd:60,type:'ptc'},
-{name:'DutchyCorp',url:'https://dutchycorp.space',cd:60,type:'faucet'},
-{name:'FaucetPay (task)',url:'https://faucetpay.io',cd:60,type:'ptc'}];
+{name:'FireFaucet',url:'https://firefaucet.win',cd:30,type:'faucet',cur:'USDT'},
+{name:'FaucetCrypto',url:'https://faucetcrypto.com',cd:30,type:'faucet',cur:'USDT'},
+{name:'FreeBitcoin',url:'https://freebitco.in',cd:60,type:'faucet',cur:'BTC'},
+{name:'Bitcoinker',url:'https://bitcoinker.com',cd:5,type:'faucet',cur:'BTC'},
+{name:'BonusBitcoin',url:'https://bonusbitcoin.co',cd:15,type:'faucet',cur:'BTC'},
+{name:'Satoshihero',url:'https://satoshihero.com',cd:8,type:'faucet',cur:'BTC'},
+{name:'Cointiply',url:'https://cointiply.com',cd:60,type:'offerwall',cur:'USD'},
+{name:'CoinPayU',url:'https://www.coinpayu.com',cd:60,type:'ptc',cur:'USDT'},
+{name:'DutchyCorp',url:'https://dutchycorp.space',cd:60,type:'faucet',cur:'USDT'},
+{name:'FaucetPay (task)',url:'https://faucetpay.io',cd:60,type:'ptc',cur:'USDT'},
+{name:'ClaimFreeCoins',url:'https://claimfreecoins.io',cd:60,type:'faucet',cur:'DOGE'},
+{name:'MoonBitcoin',url:'https://moonbitcoin.cash',cd:60,type:'faucet',cur:'BTC'},
+{name:'MoonDogecoin',url:'https://moondoge.co.in',cd:60,type:'faucet',cur:'DOGE'},
+{name:'MoonLitecoin',url:'https://moonlitecoin.space',cd:60,type:'faucet',cur:'LTC'},
+{name:'MoonDash',url:'https://moondash.co.in',cd:60,type:'faucet',cur:'DASH'}
+];
+
+const CURRENCIES=['USDT','BTC','ETH','DOGE','LTC','TRX','BNB','XRP','SOL','ADA','DASH','USD','EUR','altro'];
+
 let code='';try{code=localStorage.getItem('faucetdesk.sync')||''}catch(e){}
-if(!S||!S.sites)S={goal:1,next:CAT.length+1,updated:0,sites:CAT.map((c,i)=>({id:i+1,...c,log:[]}))};
+
+/* Migrazione da v1 (tutto USDT) */
+if(S&&S.sites&&!S.version){
+  S.sites.forEach(s=>{if(!s.cur)s.cur='USDT'});
+  S.goals=S.goals||{USDT:S.goal||1};
+  S.version=2;
+}
+if(!S||!S.sites){
+  S={version:2,goals:{USDT:1},next:CAT.length+1,updated:0,
+     sites:CAT.map((c,i)=>({id:i+1,...c,log:[]}))};
+}
+
 const setStat=t=>{const e=document.getElementById('sst');if(e)e.textContent=t};
 let pushT;
 function push(){if(!code)return;clearTimeout(pushT);pushT=setTimeout(()=>{
@@ -101,27 +129,57 @@ const save=()=>{S.updated=Date.now();try{localStorage.setItem(K,JSON.stringify(S
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&','<':'<','>':'>','"':'"',"'":'&#39;'}[c]));
 const d0=()=>{const d=new Date();d.setHours(0,0,0,0);return +d};
-const total=(from,to=Infinity)=>S.sites.reduce((a,s)=>a+s.log.filter(l=>l.t>=from&&l.t<to).reduce((x,l)=>x+l.a,0),0);
-const f4=n=>n.toFixed(4);
+
+/* Totali filtrati per valuta */
+function total(cur,from,to=Infinity){
+  return S.sites
+    .filter(s=>(s.cur||'USDT')===cur)
+    .reduce((a,s)=>a+s.log.filter(l=>l.t>=from&&l.t<to).reduce((x,l)=>x+l.a,0),0);
+}
+function allCurrencies(){
+  const set=new Set();
+  S.sites.forEach(s=>set.add(s.cur||'USDT'));
+  Object.keys(S.goals||{}).forEach(c=>set.add(c));
+  return [...set].sort();
+}
+function fmt(n,cur){
+  if(n==null||isNaN(n))return '—';
+  const highPrec=['BTC','ETH','LTC','BNB','SOL','ADA','DASH'].includes(cur);
+  return highPrec?n.toFixed(8).replace(/\.?0+$/,''):n.toFixed(4).replace(/\.?0+$/,'');
+}
 
 function head(){
-  const t=total(d0()),p=Math.min(100,t/S.goal*100);
-  $('#today').textContent=f4(t);$('#goalv').textContent=S.goal;
+  const curs=allCurrencies();
+  if(!curs.includes(activeCur))activeCur=curs[0]||'USDT';
+  const t=total(activeCur,d0());
+  const g=(S.goals&&S.goals[activeCur])||0;
+  const p=g>0?Math.min(100,t/g*100):0;
+  $('#today').textContent=fmt(t,activeCur);
+  $('#goalv').textContent=fmt(g,activeCur);
+  $('#goal-cur').textContent=activeCur;
   $('#pbar').style.width=p+'%';
-  $('#gtext').textContent=t>=S.goal?'Obiettivo raggiunto.':'Mancano '+f4(S.goal-t)+' USDT.';
+  $('#gtext').textContent=g<=0?'Imposta un obiettivo in Impostazioni.':(t>=g?'Obiettivo raggiunto.':'Mancano '+fmt(g-t,activeCur)+' '+activeCur+'.');
+  /* tabs valute */
+  const tabs=$('#curr-tabs');
+  tabs.innerHTML=curs.map(c=>`<button role="tab" data-cur="${c}" aria-selected="${c===activeCur}">${c}</button>`).join('');
   document.querySelectorAll('nav button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===tab));
 }
 
 function viewSites(){
   if(!S.sites.length)return '<p class="note">Nessun sito. Aggiungine uno da Impostazioni.</p>';
-  return S.sites.map(s=>`<article class="site">
-    <div class="top"><div><h3>${esc(s.name)}</h3><span class="tag">${esc(s.type)} · ogni ${s.cd} min</span></div><div class="cd" data-id="${s.id}"></div></div>
+  return S.sites.map(s=>{
+    const cur=s.cur||'USDT';
+    return `<article class="site">
+    <div class="top"><div><h3>${esc(s.name)} <span class="badge">${esc(cur)}</span></h3>
+    <span class="tag">${esc(s.type)} · ogni ${s.cd} min</span></div>
+    <div class="cd" data-id="${s.id}"></div></div>
     <div class="row">
       <a class="btn ghost" href="${esc(s.url)}" target="_blank" rel="noopener">Apri sito</a>
-      <input id="a${s.id}" type="number" step="any" min="0" inputmode="decimal" placeholder="USDT" aria-label="Importo in USDT">
+      <input id="a${s.id}" type="number" step="any" min="0" inputmode="decimal" placeholder="${esc(cur)}" aria-label="Importo in ${esc(cur)}">
       <input id="m${s.id}" type="number" step="any" min="0" inputmode="decimal" placeholder="minuti" aria-label="Minuti impiegati">
       <button class="btn" data-claim="${s.id}">Registra</button>
-    </div></article>`).join('');
+    </div></article>`;
+  }).join('');
 }
 
 function stats(s){
@@ -130,41 +188,106 @@ function stats(s){
 }
 function viewRank(){
   const rows=S.sites.map(s=>({s,...stats(s)})).sort((x,y)=>(y.rate??-1)-(x.rate??-1));
-  return `<p class="note">Ordinata per USDT guadagnati all'ora, calcolati dai tuoi registri. Più registri inserisci, più è affidabile.</p>
-  <div class="scroll"><table><tr><th>Sito</th><th>USDT/ora</th><th>Media per claim</th><th>Totale</th><th>Claim</th></tr>`+
-  rows.map(r=>`<tr><td>${esc(r.s.name)}</td><td>${r.rate==null?'—':f4(r.rate)}</td><td>${r.avg==null?'—':f4(r.avg)}</td><td>${f4(r.a)}</td><td>${r.n}</td></tr>`).join('')+'</table></div>';
+  return `<p class="note">Ordinata per guadagno all'ora nella crypto del sito. Più registri inserisci, più è affidabile.</p>
+  <div class="scroll"><table>
+  <tr><th>Sito</th><th>Crypto</th><th>/ora</th><th>Media claim</th><th>Totale</th><th>Claim</th></tr>`+
+  rows.map(r=>{
+    const cur=r.s.cur||'USDT';
+    return `<tr>
+      <td>${esc(r.s.name)}</td>
+      <td><span class="badge">${esc(cur)}</span></td>
+      <td>${r.rate==null?'—':fmt(r.rate,cur)}</td>
+      <td>${r.avg==null?'—':fmt(r.avg,cur)}</td>
+      <td>${fmt(r.a,cur)}</td>
+      <td>${r.n}</td>
+    </tr>`;
+  }).join('')+'</table></div>';
 }
 
 function viewLog(){
   let days='';
   for(let i=6;i>=0;i--){
-    const from=d0()-i*864e5,t=total(from,from+864e5);
-    days+=`<div class="day"><span>${new Date(from).toLocaleDateString('it-IT',{weekday:'short',day:'numeric'})}</span><div class="bar"><i style="width:${Math.min(100,t/S.goal*100)}%"></i></div><span>${f4(t)}</span></div>`;
+    const from=d0()-i*864e5,t=total(activeCur,from,from+864e5);
+    const g=(S.goals&&S.goals[activeCur])||0;
+    days+=`<div class="day"><span>${new Date(from).toLocaleDateString('it-IT',{weekday:'short',day:'numeric'})}</span>
+    <div class="bar"><i style="width:${g>0?Math.min(100,t/g*100):0}%"></i></div>
+    <span>${fmt(t,activeCur)} ${activeCur}</span></div>`;
   }
-  const all=[];S.sites.forEach(s=>s.log.forEach(l=>all.push({n:s.name,...l})));
+  const all=[];
+  S.sites.forEach(s=>s.log.forEach(l=>all.push({n:s.name,cur:s.cur||'USDT',...l})));
   all.sort((x,y)=>y.t-x.t);
-  const list=all.slice(0,20).map(l=>`<tr><td>${new Date(l.t).toLocaleString('it-IT',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</td><td>${esc(l.n)}</td><td>${f4(l.a)}</td></tr>`).join('');
-  return `<div class="panel"><h3>Ultimi 7 giorni</h3>${days}</div>
-  <div class="scroll"><table><tr><th>Quando</th><th>Sito</th><th>USDT</th></tr>${list||'<tr><td colspan="3">Nessun guadagno registrato.</td></tr>'}</table></div>`;
+  const list=all.slice(0,30).map(l=>`<tr>
+    <td>${new Date(l.t).toLocaleString('it-IT',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</td>
+    <td>${esc(l.n)}</td>
+    <td>${fmt(l.a,l.cur)} <span class="badge">${esc(l.cur)}</span></td>
+  </tr>`).join('');
+  return `<div class="panel"><h3>Ultimi 7 giorni (${activeCur})</h3>${days}</div>
+  <div class="scroll"><table><tr><th>Quando</th><th>Sito</th><th>Importo</th></tr>
+  ${list||'<tr><td colspan="3">Nessun guadagno registrato.</td></tr>'}</table></div>`;
 }
 
 function viewSet(){
-  return `<div class="panel"><h3>Obiettivo giornaliero</h3>
-    <div class="row"><input id="goal" type="number" step="any" min="0" value="${S.goal}"><button class="btn" data-act="goal">Salva obiettivo</button></div></div>
+  const goalInputs=allCurrencies().map(c=>{
+    const v=(S.goals&&S.goals[c])||0;
+    return `<div class="row" style="margin:6px 0">
+      <span style="min-width:60px;font-weight:600">${esc(c)}</span>
+      <input id="g-${c}" type="number" step="any" min="0" value="${v}" style="flex:1">
+      <button class="btn" data-act="goal" data-cur="${c}">Salva</button>
+    </div>`;
+  }).join('')||'<p class="note">Aggiungi prima dei siti.</p>';
+
+  return `<div class="panel"><h3>Obiettivi giornalieri</h3>
+    <p class="note">Imposta un obiettivo per ogni crypto che usi.</p>
+    ${goalInputs}</div>
+
   <div class="panel"><h3>Aggiungi sito</h3>
-    <div class="grid"><input id="nn" placeholder="Nome"><input id="nu" placeholder="https://…" inputmode="url">
-    <input id="nc" type="number" min="1" placeholder="Attesa (min)" value="60">
-    <select id="nt"><option>faucet</option><option>ptc</option><option>offerwall</option><option>altro</option></select></div>
-    <div class="row"><button class="btn" data-act="add">Aggiungi sito</button></div></div>
-  <div class="panel"><h3>Siti salvati</h3>${S.sites.map(s=>`<div class="top" style="margin:6px 0"><span>${esc(s.name)}</span><button class="btn del" data-del="${s.id}">Elimina</button></div>`).join('')||'<p class="note">Nessun sito.</p>'}</div>
-  <div class="panel"><h3>Catalogo faucet</h3><p class="note">Timer indicativi trovati in guide pubbliche: controllali sul sito e correggili se serve.</p>
-    ${CAT.map((c,i)=>S.sites.some(x=>x.name.replace(' (esempio)','')===c.name)?'':`<div class="top" style="margin:6px 0"><span>${esc(c.name)} <span class="tag">${c.type} · ${c.cd} min</span></span><button class="btn" data-cat="${i}">Aggiungi</button></div>`).join('')||'<p class="note">Hai già aggiunto tutto il catalogo.</p>'}</div>
-  <div class="panel"><h3>Sincronizzazione cloud</h3><p class="note">Con lo stesso codice ritrovi i dati su ogni dispositivo. Scegli un codice lungo (almeno 12 caratteri): chiunque lo conosca può leggere i tuoi dati. Richiede la configurazione Cloudflare KV.</p>
-    <div class="row"><input id="sc" type="password" autocomplete="off" placeholder="Codice di sincronizzazione" value="${esc(code)}"><button class="btn" data-act="sync">Attiva sincronizzazione</button></div>
-    <p class="note" id="sst">${code?'Attiva':'Non attiva'}</p></div>
-  <div class="panel"><h3>Backup</h3><p class="note">Esporta per salvare i dati, incolla e importa per ripristinarli.</p>
+    <div class="grid">
+      <input id="nn" placeholder="Nome">
+      <input id="nu" placeholder="https://…" inputmode="url">
+      <input id="nc" type="number" min="1" placeholder="Attesa (min)" value="60">
+      <select id="nt"><option>faucet</option><option>ptc</option><option>offerwall</option><option>altro</option></select>
+      <select id="ncur">${CURRENCIES.map(c=>`<option value="${c}">${c}</option>`).join('')}</select>
+    </div>
+    <div class="row"><button class="btn" data-act="add">Aggiungi sito</button></div>
+  </div>
+
+  <div class="panel"><h3>Siti salvati</h3>
+    ${S.sites.map(s=>`<div class="top" style="margin:6px 0">
+      <span>${esc(s.name)} <span class="badge">${esc(s.cur||'USDT')}</span></span>
+      <div style="display:flex;gap:6px;align-items:center">
+        <select data-editcur="${s.id}" style="padding:4px 8px;font-size:.85rem">
+          ${CURRENCIES.map(c=>`<option value="${c}" ${c===(s.cur||'USDT')?'selected':''}>${c}</option>`).join('')}
+        </select>
+        <button class="btn del" data-del="${s.id}">Elimina</button>
+      </div>
+    </div>`).join('')||'<p class="note">Nessun sito.</p>'}
+  </div>
+
+  <div class="panel"><h3>Catalogo faucet</h3>
+    <p class="note">Timer e crypto indicativi: correggili se serve.</p>
+    ${CAT.map((c,i)=>S.sites.some(x=>x.name===c.name)?'':`<div class="top" style="margin:6px 0">
+      <span>${esc(c.name)} <span class="badge">${c.cur}</span> <span class="tag">${c.type} · ${c.cd} min</span></span>
+      <button class="btn" data-cat="${i}">Aggiungi</button>
+    </div>`).join('')||'<p class="note">Hai già aggiunto tutto il catalogo.</p>'}
+  </div>
+
+  <div class="panel"><h3>Sincronizzazione cloud</h3>
+    <p class="note">Con lo stesso codice ritrovi i dati su ogni dispositivo. Codice ≥ 12 caratteri. Richiede Cloudflare KV.</p>
+    <div class="row">
+      <input id="sc" type="password" autocomplete="off" placeholder="Codice di sincronizzazione" value="${esc(code)}">
+      <button class="btn" data-act="sync">Attiva sincronizzazione</button>
+    </div>
+    <p class="note" id="sst">${code?'Attiva':'Non attiva'}</p>
+  </div>
+
+  <div class="panel"><h3>Backup</h3>
+    <p class="note">Esporta per salvare, incolla e importa per ripristinare.</p>
     <textarea id="bk" aria-label="Dati di backup"></textarea>
-    <div class="row"><button class="btn ghost" data-act="exp">Esporta</button><button class="btn" data-act="imp">Importa</button></div></div>`;
+    <div class="row">
+      <button class="btn ghost" data-act="exp">Esporta</button>
+      <button class="btn" data-act="imp">Importa</button>
+    </div>
+  </div>`;
 }
 
 function render(){
@@ -187,25 +310,71 @@ setInterval(tick,1000);
 
 document.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
+
+  /* Cambio valuta obiettivo */
+  if(b.dataset.cur){activeCur=b.dataset.cur;render();return}
+
   if(b.dataset.tab){tab=b.dataset.tab;render();return}
+
   if(b.dataset.claim){
-    const id=b.dataset.claim,a=parseFloat($('#a'+id).value);
+    const id=+b.dataset.claim,a=parseFloat($('#a'+id).value);
     if(!(a>=0)||$('#a'+id).value===''){$('#a'+id).focus();return}
     const m=parseFloat($('#m'+id).value)||1;
-    S.sites.find(s=>s.id==id).log.push({t:Date.now(),a,m});save();render();return}
-  if(b.dataset.cat){const c=CAT[b.dataset.cat];S.sites.push({id:S.next++,...c,log:[]});save();render();return}
+    const site=S.sites.find(s=>s.id==id);
+    site.log.push({t:Date.now(),a,m});
+    save();render();return;
+  }
+
+  if(b.dataset.cat){
+    const c=CAT[+b.dataset.cat];
+    S.sites.push({id:S.next++,...c,log:[]});
+    if(!S.goals[c.cur])S.goals[c.cur]=0;
+    save();render();return;
+  }
+
   if(b.dataset.del){
-    if(confirm('Eliminare il sito e i suoi registri?')){S.sites=S.sites.filter(s=>s.id!=b.dataset.del);save();render()}return}
+    if(confirm('Eliminare il sito e i suoi registri?')){
+      S.sites=S.sites.filter(s=>s.id!=b.dataset.del);save();render();
+    }
+    return;
+  }
+
   const act=b.dataset.act;
-  if(act==='goal'){const g=parseFloat($('#goal').value);if(g>0){S.goal=g;save();render()}}
+  if(act==='goal'){
+    const cur=b.dataset.cur;
+    const g=parseFloat($('#g-'+cur).value);
+    if(g>=0){S.goals=S.goals||{};S.goals[cur]=g;save();render()}
+  }
   if(act==='add'){
-    const n=$('#nn').value.trim(),u=$('#nu').value.trim();
+    const n=$('#nn').value.trim(),u=$('#nu').value.trim(),cur=$('#ncur').value;
     if(!n||!/^https?:\/\//i.test(u)){alert('Inserisci un nome e un indirizzo che inizia con http:// o https://');return}
-    S.sites.push({id:S.next++,name:n,url:u,cd:parseInt($('#nc').value)||60,type:$('#nt').value,log:[]});save();render()}
-  if(act==='sync'){const c=$('#sc').value.trim();if(c.length<12){alert('Il codice deve avere almeno 12 caratteri.');return}code=c;try{localStorage.setItem('faucetdesk.sync',c)}catch(e){}setStat('Collegamento…');pull()}
-  if(act==='exp')$('#bk').value=JSON.stringify(S);
-  if(act==='imp'){try{const d=JSON.parse($('#bk').value);if(!d.sites)throw 0;S=d;save();render()}catch(x){alert('Backup non valido.')}}
+    S.sites.push({id:S.next++,name:n,url:u,cd:parseInt($('#nc').value)||60,type:$('#nt').value,cur,log:[]});
+    if(!S.goals[cur])S.goals[cur]=0;
+    save();render();
+  }
+  if(act==='sync'){
+    const c=$('#sc').value.trim();
+    if(c.length<12){alert('Il codice deve avere almeno 12 caratteri.');return}
+    code=c;try{localStorage.setItem('faucetdesk.sync',c)}catch(e){}
+    setStat('Collegamento…');pull();
+  }
+  if(act==='exp')$('#bk').value=JSON.stringify(S,null,2);
+  if(act==='imp'){
+    try{const d=JSON.parse($('#bk').value);if(!d.sites)throw 0;S=d;save();render()}
+    catch(x){alert('Backup non valido.')}
+  }
 });
+
+/* Cambio valuta sito dalla select in Impostazioni */
+document.addEventListener('change',e=>{
+  const sel=e.target.closest('[data-editcur]');
+  if(sel){
+    const id=+sel.dataset.editcur;
+    const site=S.sites.find(s=>s.id===id);
+    if(site){site.cur=sel.value;if(!S.goals[site.cur])S.goals[site.cur]=0;save();render()}
+  }
+});
+
 render();
 try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
 pull();
